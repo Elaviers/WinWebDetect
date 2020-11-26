@@ -188,22 +188,25 @@ Notes:
 
                 cd.Check(client, msInterval,
                     (string name, string url) => {
-                        player.PlayLooping();
-
-                        string fname = name.Length > 0 ? $"\"{name} ({url})\"" : url;
-
-                        var result = MessageBox.Show(
-                            $"{fname} has been updated.\nGo there now?",
-                            $"Change detected for {fname}",
-                            MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation);
-
-                        player.Stop();
-
-                        if (result == DialogResult.Yes)
+                        System.Threading.Tasks.Task.Run(() =>
                         {
-                            System.Diagnostics.Process.Start(url);
-                        }
-                    });
+                            player.PlayLooping();
+
+                            string fname = name.Length > 0 ? $"\"{name} ({url})\"" : url;
+
+                            var result = MessageBox.Show(
+                                $"{fname} has been updated.\nGo there now?",
+                                $"Change detected for {fname}",
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation);
+
+                            player.Stop();
+
+                            if (result == DialogResult.Yes)
+                            {
+                                System.Diagnostics.Process.Start(url);
+                            }
+                        });
+                });
 
                 Console.Out.WriteLine();
             }
