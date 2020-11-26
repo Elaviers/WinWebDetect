@@ -49,17 +49,27 @@ namespace WebChangeDetect
             public bool Check(HttpClient web)
             {
                 HttpResponseMessage response = web.GetAsync(url).GetAwaiter().GetResult();
-                response.EnsureSuccessStatusCode();
 
-                string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                if (response.IsSuccessStatusCode)
+                {
+                    string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
-                bool differsFromInitial = false;
+                    bool differsFromInitial = false;
 
-                foreach (var st in subtrackers)
-                    if (st.Check(content))
-                        differsFromInitial = true;
+                    foreach (var st in subtrackers)
+                        if (st.Check(content))
+                            differsFromInitial = true;
 
-                return differsFromInitial;
+                    return differsFromInitial;
+                }
+                else
+                {
+                    
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write((int)response.StatusCode == 429 ? "(TOO MANY REQUESTS)" : "(FAILED)");
+                }
+
+                return false;
             }
 
             public void Add(string text)
@@ -79,7 +89,7 @@ namespace WebChangeDetect
         public delegate void Notify(string name, string url);
 
         //notify args are name and url
-        public void Check(HttpClient client, Notify notify)
+        public void Check(HttpClient client, int msInterval, Notify notify)
         {
             foreach (Tracker e in trackers)
             {
@@ -106,6 +116,8 @@ namespace WebChangeDetect
                 {
                     e.canNotify = true;
                 }
+
+                System.Threading.Thread.Sleep(msInterval);
             }
         }
 
