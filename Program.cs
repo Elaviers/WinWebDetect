@@ -197,7 +197,7 @@ Notes:
                             var result = MessageBox.Show(
                                 $"{fname} has been updated.\nGo there now?",
                                 $"Change detected for {fname}",
-                                MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation);
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, (MessageBoxOptions)0x40000 /*topmost*/);
 
                             player.Stop();
 
