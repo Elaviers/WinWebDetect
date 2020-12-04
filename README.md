@@ -7,7 +7,9 @@ Where URL is a URL to request and TRACKERS are strings to look for in the reques
 
 ## Flags
     /                   Seperator
+    /a, /async          Query each URL asynchronously (at the same time)
     /i, /interval       Amount of time between each check
+    /y                  Automatically open url when change detected (popup box still appears)
     /s                  Marks the desired state of the current tracker as FALSE
     /S                  Marks the desired state of the current tracker as TRUE
     /n, /name           Name of the current url

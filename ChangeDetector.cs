@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace WebChangeDetect
 {
@@ -20,12 +21,15 @@ namespace WebChangeDetect
                 }
 
                 //Returns true if differs from initial state
-                public bool Check(string content)
+                public bool Check(string content, bool silent)
                 {
                     int state = content.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0;
 
-                    Console.ForegroundColor = state != 0 ? ConsoleColor.Green : ConsoleColor.Red;
-                    Console.Write('▓');
+                    if (!silent)
+                    {
+                        Console.ForegroundColor = state != 0 ? ConsoleColor.Green : ConsoleColor.Red;
+                        Console.Write('▓');
+                    }
 
                     if (initialState < 0) initialState = state;
                     return initialState != state;
@@ -34,6 +38,7 @@ namespace WebChangeDetect
 
             public string name;
             public readonly string url;
+
             private List<SubTracker> subtrackers;
 
             public bool canNotify;
@@ -46,30 +51,53 @@ namespace WebChangeDetect
                 this.canNotify = true;
             }
 
-            public bool Check(HttpClient web)
+            public enum CheckResult
             {
-                HttpResponseMessage response = web.GetAsync(url).GetAwaiter().GetResult();
+                IS_DESIRED_STATE,
+                IS_NOT_DESIRED_STATE,
+                FAIL_TOO_MANY_REQUESTS,
+                FAIL
+            }
+
+            public CheckResult Check(HttpClient web, bool silent)
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, new Uri(url));
+                request.Headers.Add("Connection", "close");
+                request.Headers.Add("Upgrade-Insecure-Requests", "1");
+                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36 Edg/87.0.664.52");
+                request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9");
+                request.Headers.Add("Sec-Fetch-Site", "none");
+                request.Headers.Add("Sec-Fetch-Mode", "navigate");
+                request.Headers.Add("Sec-Fetch-User", "?1");
+                request.Headers.Add("Sec-Fetch-Dest", "document");
+                request.Headers.Add("Accept-Encoding", "gzip, deflate");
+                request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+
+                if (url.IndexOf("amazon", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    request.Headers.Add("Cookie", "" /*Ha, as if I'm going to put my cookies on github. Get your own!*/);
+                }
+
+                HttpResponseMessage response = web.SendAsync(request, HttpCompletionOption.ResponseContentRead).Result;
 
                 if (response.IsSuccessStatusCode)
                 {
-                    string content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    string content = response.Content.ReadAsStringAsync().Result;
 
                     bool differsFromInitial = false;
 
                     foreach (var st in subtrackers)
-                        if (st.Check(content))
+                        if (st.Check(content, silent))
                             differsFromInitial = true;
 
-                    return differsFromInitial;
+                    return differsFromInitial ? CheckResult.IS_DESIRED_STATE : CheckResult.IS_NOT_DESIRED_STATE;
                 }
-                else
+                else if ((int)response.StatusCode == 429)
                 {
-                    
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.Write((int)response.StatusCode == 429 ? "(TOO MANY REQUESTS)" : "(FAILED)");
+                    return CheckResult.FAIL_TOO_MANY_REQUESTS;
                 }
 
-                return false;
+                return CheckResult.FAIL;
             }
 
             public void Add(string text)
@@ -89,23 +117,38 @@ namespace WebChangeDetect
         public delegate void Notify(string name, string url);
 
         //notify args are name and url
-        public void Check(HttpClient client, int msInterval, Notify notify)
+        public void Check(HttpClient client, int msInterval, bool asyncMode, Notify notify)
         {
-            foreach (Tracker e in trackers)
+            Task<Tracker.CheckResult>[] tasks = asyncMode ? new Task<Tracker.CheckResult>[trackers.Count] : null;
+
+            if (asyncMode)
             {
+                for (int i = 0; i < trackers.Count; ++i)
+                {
+                    Tracker e = trackers[i];
+                    tasks[i] = Task.Run(() => e.Check(client, true));
+                }
+            }
+
+            for (int i = 0; i < trackers.Count; ++i)
+            {
+                Tracker e = trackers[i];
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.Out.Write($"{(e.name.Length > 0 ? e.name : e.url)} ");
 
-                bool differsFromInitial = e.Check(client);
+                Tracker.CheckResult checkResult = asyncMode ? tasks[i].Result : e.Check(client, false);
 
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Out.Write('|');
-
-                Console.ForegroundColor = differsFromInitial ? ConsoleColor.Green : ConsoleColor.Red;
-                Console.Out.Write("█ ");
-
-                if (differsFromInitial)
+                if (!asyncMode)
                 {
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Out.Write('|');
+                }
+
+                if (checkResult == Tracker.CheckResult.IS_DESIRED_STATE)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.Out.Write("█ ");
+
                     if (e.canNotify)
                     {
                         e.canNotify = false;
@@ -114,11 +157,31 @@ namespace WebChangeDetect
                 }
                 else
                 {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    switch(checkResult)
+                    {
+                        case Tracker.CheckResult.IS_NOT_DESIRED_STATE:
+                            Console.Out.Write("█ ");
+                            break;
+
+                        case Tracker.CheckResult.FAIL_TOO_MANY_REQUESTS:
+                            Console.Out.Write("(TOO MANY REQUESTS)");
+                            break;
+
+                        default:
+                            Console.Out.Write("FAIL");
+                            break;
+                    }
+
                     e.canNotify = true;
                 }
 
-                System.Threading.Thread.Sleep(msInterval);
+                if (!asyncMode)
+                    System.Threading.Thread.Sleep(msInterval);
             }
+
+            if (asyncMode)
+                System.Threading.Thread.Sleep(msInterval);
         }
 
         public void AddTracker(string url)
@@ -146,6 +209,6 @@ namespace WebChangeDetect
                 trackers[trackers.Count - 1].TrySetSTInitialState(state);
         }
 
-        public bool IsEmpty { get { return trackers.Count == 0; } }
+        public int URLCount { get { return trackers.Count; } }
     }
 }
