@@ -69,6 +69,11 @@ namespace WinWebDetect
 
             public bool canNotify;
 
+            public bool debug;
+
+            private string _latestContent;
+            public string LatestContent { get => _latestContent; }
+
             public Tracker(string url)
             {
                 this.name = string.Empty;
@@ -76,6 +81,7 @@ namespace WinWebDetect
                 this.cookieString = CookieReader.GetCookieString(url);
                 this.subtrackers = new List<SubTracker>();
                 this.canNotify = true;
+                this.debug = false;
             }
 
             public enum CheckResult
@@ -105,7 +111,7 @@ namespace WinWebDetect
 
                 if (response.IsSuccessStatusCode)
                 {
-                    string content = response.Content.ReadAsStringAsync().Result;
+                    _latestContent = response.Content.ReadAsStringAsync().Result;
 
                     bool differsFromInitial = false;
                     if (_subtrackerResults == null || _subtrackerResults.Length != subtrackers.Count)
@@ -113,7 +119,7 @@ namespace WinWebDetect
 
                     for (int i = 0; i < subtrackers.Count; ++i)
                     {
-                        subtrackers[i].Check(content, ref _subtrackerResults[i]);
+                        subtrackers[i].Check(_latestContent, ref _subtrackerResults[i]);
 
                         if (_subtrackerResults[i].notify)
                             differsFromInitial = true;
@@ -195,6 +201,13 @@ namespace WinWebDetect
                     if (e.canNotify)
                     {
                         e.canNotify = false;
+
+                        if (e.debug)
+                        {
+                            System.IO.File.WriteAllText("DEBUG.TXT", e.LatestContent);
+                            Console.Out.Write("(DEBUG.TXT WRITTEN)");
+                        }
+
                         notify(e.name, e.url);
                     }
                 }
@@ -243,6 +256,12 @@ namespace WinWebDetect
         {
             if (trackers.Count > 0)
                 trackers[trackers.Count - 1].name = name;
+        }
+
+        public void TrySetTrackerDebug(bool debug)
+        {
+            if (trackers.Count > 0)
+                trackers[trackers.Count - 1].debug = debug;
         }
 
         //Attempts to set desired state of the latest tracker's latest subtracker

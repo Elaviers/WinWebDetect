@@ -101,11 +101,15 @@ Flags:
     /d, /define     (NAME)=(ARGS)   Define a profile
     /p, /profile    STRING          Use a profile
 
+    /debug          BOOL            Marks the latest url for debug
+
 Notes:
     any URL or TRACKER argument may instead be a file path
     Files are read the same way as arguments, with newlines also acting as seperators
 
-    The program will attempt to read arguments from webdetect.txt if no URLs are provided");
+    The program will attempt to read arguments from webdetect.txt if no URLs are provided
+
+    When a url is marked for debug, it will copy its http response to DEBUG.TXT when triggered");
                         }
 
                         return;
@@ -134,6 +138,12 @@ Notes:
                         cd.TrySetTrackerSTDesiredState(true);
                         flag = null;
                         Console.WriteLine(indent + "Desired state->TRUE");
+                    }
+                    else if (flag.Equals("debug", StringComparison.OrdinalIgnoreCase))
+                    {
+                        cd.TrySetTrackerDebug(true);
+                        flag = null;
+                        Console.WriteLine(indent + "Debug->TRUE");
                     }
                 }
                 else
