@@ -3,50 +3,77 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace WebChangeDetect
+namespace WinWebDetect
 {
     class ChangeDetector
     {
         private class Tracker
         {
-            private class SubTracker
+            public class SubTracker
             {
-                public int initialState;
+                public int desiredState;
                 private readonly string text;
-                
+                public string warn;
+
                 public SubTracker(string text)
                 {
-                    this.initialState = -1;
+                    this.desiredState = -1;
                     this.text = text;
                 }
 
-                //Returns true if differs from initial state
-                public bool Check(string content, bool silent)
+                public struct CheckResult
+                {
+                    public bool notify;
+
+                    public string message;
+                    public ConsoleColor messageColour;
+                }
+
+                //Returns true if desired state is met
+                public void Check(string content, ref CheckResult outResult)
                 {
                     int state = content.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0;
+                    if (desiredState < 0) desiredState = state == 0 ? 1 : 0;
 
-                    if (!silent)
+                    if (warn != null)
                     {
-                        Console.ForegroundColor = state != 0 ? ConsoleColor.Green : ConsoleColor.Red;
-                        Console.Write('▓');
-                    }
+                        outResult.notify = false;
 
-                    if (initialState < 0) initialState = state;
-                    return initialState != state;
+                        if (state == desiredState)
+                        {
+                            outResult.message = warn;
+                            outResult.messageColour = ConsoleColor.Yellow;
+                        }
+                        else
+                        {
+                            outResult.message = string.Empty;
+                        }
+                    }
+                    else
+                    {
+                        outResult.notify = state == desiredState;
+                        outResult.message = "▓";
+                        outResult.messageColour = state != 0 ? ConsoleColor.Green : ConsoleColor.Red;
+                    }
                 }
             }
 
             public string name;
             public readonly string url;
+            private readonly string cookieString;
 
             private List<SubTracker> subtrackers;
+
+            private SubTracker.CheckResult[] _subtrackerResults;
+            public SubTracker.CheckResult[] SubtrackerResults { get => _subtrackerResults; }
 
             public bool canNotify;
 
             public Tracker(string url)
             {
-                this.name = "";
+                this.name = string.Empty;
                 this.url = url;
+                this.cookieString = CookieReader.GetCookieString(url);
                 this.subtrackers = new List<SubTracker>();
                 this.canNotify = true;
             }
@@ -59,7 +86,7 @@ namespace WebChangeDetect
                 FAIL
             }
 
-            public CheckResult Check(HttpClient web, bool silent)
+            public CheckResult Check(HttpClient web)
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, new Uri(url));
                 request.Headers.Add("Connection", "close");
@@ -72,11 +99,7 @@ namespace WebChangeDetect
                 request.Headers.Add("Sec-Fetch-Dest", "document");
                 request.Headers.Add("Accept-Encoding", "gzip, deflate");
                 request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-
-                if (url.IndexOf("amazon", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    request.Headers.Add("Cookie", "" /*Ha, as if I'm going to put my cookies on github. Get your own!*/);
-                }
+                request.Headers.Add("Cookie", cookieString);
 
                 HttpResponseMessage response = web.SendAsync(request, HttpCompletionOption.ResponseContentRead).Result;
 
@@ -85,17 +108,24 @@ namespace WebChangeDetect
                     string content = response.Content.ReadAsStringAsync().Result;
 
                     bool differsFromInitial = false;
+                    if (_subtrackerResults == null || _subtrackerResults.Length != subtrackers.Count)
+                        _subtrackerResults = new SubTracker.CheckResult[subtrackers.Count];
 
-                    foreach (var st in subtrackers)
-                        if (st.Check(content, silent))
+                    for (int i = 0; i < subtrackers.Count; ++i)
+                    {
+                        subtrackers[i].Check(content, ref _subtrackerResults[i]);
+
+                        if (_subtrackerResults[i].notify)
                             differsFromInitial = true;
+                    }
 
                     return differsFromInitial ? CheckResult.IS_DESIRED_STATE : CheckResult.IS_NOT_DESIRED_STATE;
                 }
-                else if ((int)response.StatusCode == 429)
-                {
+
+                _subtrackerResults = null;
+                
+                if ((int)response.StatusCode == 429)
                     return CheckResult.FAIL_TOO_MANY_REQUESTS;
-                }
 
                 return CheckResult.FAIL;
             }
@@ -105,10 +135,16 @@ namespace WebChangeDetect
                 subtrackers.Add(new SubTracker(text));
             }
 
-            public void TrySetSTInitialState(bool initialState)
+            public void TrySetSTDesiredState(bool desiredState)
             {
                 if (subtrackers.Count > 0)
-                    subtrackers[subtrackers.Count - 1].initialState = initialState ? 1 : 0;
+                    subtrackers[subtrackers.Count - 1].desiredState = desiredState ? 1 : 0;
+            }
+
+            public void TrySetSTWarn(string warn)
+            {
+                if (subtrackers.Count > 0)
+                    subtrackers[subtrackers.Count - 1].warn = warn;
             }
         }
 
@@ -126,7 +162,7 @@ namespace WebChangeDetect
                 for (int i = 0; i < trackers.Count; ++i)
                 {
                     Tracker e = trackers[i];
-                    tasks[i] = Task.Run(() => e.Check(client, true));
+                    tasks[i] = Task.Run(() => e.Check(client));
                 }
             }
 
@@ -136,10 +172,17 @@ namespace WebChangeDetect
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.Out.Write($"{(e.name.Length > 0 ? e.name : e.url)} ");
 
-                Tracker.CheckResult checkResult = asyncMode ? tasks[i].Result : e.Check(client, false);
+                Tracker.CheckResult checkResult = asyncMode ? tasks[i].Result : e.Check(client);
 
-                if (!asyncMode)
+                if (e.SubtrackerResults != null)
                 {
+                    foreach (var result in e.SubtrackerResults)
+                        if (result.message.Length > 0)
+                        {
+                            Console.ForegroundColor = result.messageColour;
+                            Console.Out.Write(result.message);
+                        }
+
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.Out.Write('|');
                 }
@@ -202,11 +245,17 @@ namespace WebChangeDetect
                 trackers[trackers.Count - 1].name = name;
         }
 
-        //Attempts to set initial state of the latest tracker's latest subtracker
-        public void TrySetTrackerSTState(bool state)
+        //Attempts to set desired state of the latest tracker's latest subtracker
+        public void TrySetTrackerSTDesiredState(bool desiredState)
         {
             if (trackers.Count > 0)
-                trackers[trackers.Count - 1].TrySetSTInitialState(state);
+                trackers[trackers.Count - 1].TrySetSTDesiredState(desiredState);
+        }
+
+        public void TrySetTrackerSTWarn(string warn)
+        {
+            if (trackers.Count > 0)
+                trackers[trackers.Count - 1].TrySetSTWarn(warn);
         }
 
         public int URLCount { get { return trackers.Count; } }
