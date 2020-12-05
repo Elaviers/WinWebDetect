@@ -62,7 +62,7 @@ namespace WinWebDetect
             public readonly string url;
             private readonly string cookieString;
 
-            private List<SubTracker> subtrackers;
+            private readonly List<SubTracker> subtrackers;
 
             private SubTracker.CheckResult[] _subtrackerResults;
             public SubTracker.CheckResult[] SubtrackerResults { get => _subtrackerResults; }
@@ -148,7 +148,7 @@ namespace WinWebDetect
             }
         }
 
-        private List<Tracker> trackers = new List<Tracker>();
+        private readonly List<Tracker> trackers = new List<Tracker>();
 
         public delegate void Notify(string name, string url);
 

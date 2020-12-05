@@ -53,15 +53,16 @@ namespace WinWebDetect
                         byte[] eKey = new byte[encryptedKey.Length - 5];
                         Array.Copy(encryptedKey, 5, eKey, 0, eKey.Length);
 
-                        byte[] key = ProtectedData.Unprotect(eKey, null, DataProtectionScope.LocalMachine);
-                        aes = new AesGCM256();
-                        aes.key = key;
+                        aes = new AesGCM256
+                        {
+                            key = ProtectedData.Unprotect(eKey, null, DataProtectionScope.LocalMachine)
+                        };
                     }
                 }
             }
         }
 
-        private static void _ReadSQLToCookieString(SqliteConnection sql, string name, ref string cookies)
+        private static void ReadSQLToCookieString(SqliteConnection sql, string name, ref string cookies)
         {
             using (var cmd = sql.CreateCommand())
             {
@@ -97,9 +98,11 @@ namespace WinWebDetect
             if (aes == null || browserDir.Length == 0)
                 return string.Empty;
 
-            var connectionbuilder = new SqliteConnectionStringBuilder();
-            connectionbuilder.DataSource = browserDir + "\\Default\\Cookies";
-            connectionbuilder.Mode = SqliteOpenMode.ReadOnly;
+            var connectionbuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = browserDir + "\\Default\\Cookies",
+                Mode = SqliteOpenMode.ReadOnly
+            };
 
             string domain = Regex.Match(url, @"[^\.]+\.([^\/]+)").Groups[1].Captures[0].Value;
             string host = Regex.Match(url, @"[^\/]*[\/]*(.*\..*\.[^\/]*)").Groups[1].Captures[0].Value;
@@ -109,8 +112,8 @@ namespace WinWebDetect
             {
                 sql.Open();
                     
-                _ReadSQLToCookieString(sql, host, ref cookies);
-                _ReadSQLToCookieString(sql, domain, ref cookies);
+                ReadSQLToCookieString(sql, host, ref cookies);
+                ReadSQLToCookieString(sql, domain, ref cookies);
             }
 
             return cookies;

@@ -256,12 +256,14 @@ Notes:
                 }
             }
 
-            Settings settings = new Settings();
-            settings.newurl = true;
-            settings.interval = 1f;
-            settings.asyncMode = false;
-            settings.autoOpen = false;
-            settings.profiles = new Dictionary<string, string>();
+            Settings settings = new Settings
+            {
+                newurl = true,
+                interval = 1f,
+                asyncMode = false,
+                autoOpen = false,
+                profiles = new Dictionary<string, string>()
+            };
 
             ChangeDetector cd = new ChangeDetector();
             ProcessArgs(0, args, cd, ref settings);
