@@ -35,7 +35,7 @@ namespace WinWebDetect
 
         private static void ProcessArgs(int depth, string argstring, ChangeDetector cd, ref Settings settings)
         {
-            MatchCollection m = Regex.Matches(argstring, @"""((?:\\.|[^""])*)""|\S+"); //Match quoted strings and arguments, ignore escaped quotes
+            MatchCollection m = Regex.Matches(argstring, @"""((?:\\""|[^""])*)""|\S+"); //Match quoted strings and arguments, ignore escaped quotes
             string[] args = new string[m.Count];
 
             for (int argIndex = 0; argIndex < args.Length; ++argIndex)
