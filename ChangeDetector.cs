@@ -60,7 +60,6 @@ namespace WinWebDetect
 
             public string name;
             public readonly string url;
-            private readonly string cookieString;
 
             private readonly List<SubTracker> subtrackers;
 
@@ -78,7 +77,6 @@ namespace WinWebDetect
             {
                 this.name = string.Empty;
                 this.url = url;
-                this.cookieString = CookieReader.GetCookieString(url);
                 this.subtrackers = new List<SubTracker>();
                 this.canNotify = true;
                 this.debug = false;
@@ -94,7 +92,8 @@ namespace WinWebDetect
 
             public CheckResult Check(HttpClient web)
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, new Uri(url));
+                Uri uri = new Uri(url);
+                var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 request.Headers.Add("Connection", "close");
                 request.Headers.Add("Upgrade-Insecure-Requests", "1");
                 request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36 Edg/87.0.664.52");
@@ -105,12 +104,17 @@ namespace WinWebDetect
                 request.Headers.Add("Sec-Fetch-Dest", "document");
                 request.Headers.Add("Accept-Encoding", "gzip, deflate");
                 request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-                request.Headers.Add("Cookie", cookieString);
+                request.Headers.Add("Cookie", CookieManager.GetCookieHeader(uri));
 
                 HttpResponseMessage response = web.SendAsync(request, HttpCompletionOption.ResponseContentRead).Result;
 
                 if (response.IsSuccessStatusCode)
                 {
+                    //Update cookies
+                    if (response.Headers.TryGetValues("set-cookie", out IEnumerable<string> cookies))
+                        foreach (var c in cookies)
+                            CookieManager.SetCookies(response.RequestMessage.RequestUri, c);
+
                     _latestContent = response.Content.ReadAsStringAsync().Result;
 
                     bool differsFromInitial = false;
@@ -204,8 +208,8 @@ namespace WinWebDetect
 
                         if (e.debug)
                         {
-                            System.IO.File.WriteAllText("DEBUG.TXT", e.LatestContent);
-                            Console.Out.Write("(DEBUG.TXT WRITTEN)");
+                            System.IO.File.WriteAllText("DEBUG.HTML", e.LatestContent);
+                            Console.Out.Write("(DEBUG.HTML WRITTEN)");
                         }
 
                         notify(e.name, e.url);

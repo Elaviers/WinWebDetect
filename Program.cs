@@ -31,6 +31,8 @@ namespace WinWebDetect
             public bool autoOpen;
 
             public Dictionary<string, string> profiles;
+
+            public CookieManager.CookieSource cookieSource;
         }
 
         private static void ProcessArgs(int depth, string argstring, ChangeDetector cd, ref Settings settings)
@@ -89,7 +91,7 @@ Flags:
     ___________________________________
     /               NONE            Seperator
     /a, /async      NONE            Query each URL asynchronously (at the same time)
-    /b, /browser    STRING          Set which browser's cookies to use in http requests (""edge"", ""chrome"", or ""none"")
+    /b, /browser    STRING          Set which browser's cookies to use in http requests (""auto"", ""edge"", ""chrome"", or ""none"")
     /i, /interval   FLOAT           Amount of time between each check, in seconds
 
     /y              NONE            Automatically open url when change detected (popup box still appears)
@@ -109,7 +111,7 @@ Notes:
 
     The program will attempt to read arguments from webdetect.txt if no URLs are provided
 
-    When a url is marked for debug, it will copy its http response to DEBUG.TXT when triggered");
+    When a url is marked for debug, it will copy its http response to DEBUG.HTML when triggered");
                         }
 
                         return;
@@ -152,15 +154,14 @@ Notes:
                     {
                         if (flag.Equals("browser", StringComparison.OrdinalIgnoreCase) || flag.Equals("b", StringComparison.OrdinalIgnoreCase))
                         {
-                            CookieReader.CookieSource newSource = CookieReader.CookieSource.NONE;
-
                             if (arg.Equals("chrome", StringComparison.OrdinalIgnoreCase))
-                                newSource = CookieReader.CookieSource.CHROME;
+                                settings.cookieSource = CookieManager.CookieSource.CHROME;
                             else if (arg.Equals("edge", StringComparison.OrdinalIgnoreCase))
-                                newSource = CookieReader.CookieSource.EDGE_CHROMIUM;
+                                settings.cookieSource = CookieManager.CookieSource.EDGE_CHROMIUM;
+                            else
+                                settings.cookieSource = CookieManager.CookieSource.NONE;
 
-                            CookieReader.SetCookieSource(newSource);
-                            Console.WriteLine($"CookieSource->{newSource}");
+                            Console.WriteLine(indent + $"CookieSource->{settings.cookieSource}");
                         }
                         else if (flag.Equals("interval", StringComparison.OrdinalIgnoreCase) || flag.Equals("i", StringComparison.OrdinalIgnoreCase))
                         {
@@ -248,31 +249,14 @@ Notes:
         {
             const string defaultFile = "./webdetect.txt";
 
-            try
-            {
-                CookieReader.SetCookieSource(CookieReader.CookieSource.CHROME);
-                Console.WriteLine("Will use cookies from CHROME");
-            }
-            catch (Exception)
-            {
-                try
-                {
-                    CookieReader.SetCookieSource(CookieReader.CookieSource.EDGE_CHROMIUM);
-                    Console.WriteLine("Will use cookies from EDGE_CHROMIUM");
-                }
-                catch (Exception)
-                {
-                    Console.WriteLine("CHROME or EDGE_CHROMIUM cookies not found.\nNo cookies will be used in http requests!");
-                }
-            }
-
             Settings settings = new Settings
             {
                 newurl = true,
                 interval = 1f,
                 asyncMode = false,
                 autoOpen = false,
-                profiles = new Dictionary<string, string>()
+                profiles = new Dictionary<string, string>(),
+                cookieSource = CookieManager.CookieSource.AUTO
             };
 
             ChangeDetector cd = new ChangeDetector();
@@ -296,6 +280,11 @@ Notes:
                 UseCookies = false,
                 AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
             };
+
+            if (CookieManager.LoadCookiesFromSource(settings.cookieSource))
+            {
+                Console.WriteLine($"{CookieManager.CookieCount} cookies loaded");
+            }
 
             HttpClient client = new HttpClient(handler);
             while (true)

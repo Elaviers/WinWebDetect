@@ -58,7 +58,7 @@
   <ItemGroup>
     <Compile Include="AesGCM256.cs" />
     <Compile Include="ChangeDetector.cs" />
-    <Compile Include="CookieReader.cs" />
+    <Compile Include="CookieManager.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
