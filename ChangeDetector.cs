@@ -24,6 +24,7 @@ namespace WinWebDetect
                 public struct CheckResult
                 {
                     public bool notify;
+                    public bool cancel;
 
                     public string message;
                     public ConsoleColor messageColour;
@@ -35,12 +36,14 @@ namespace WinWebDetect
                     int state = content.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0;
                     if (desiredState < 0) desiredState = state == 0 ? 1 : 0;
 
+                    outResult.cancel = false;
                     if (warn != null)
                     {
                         outResult.notify = false;
 
                         if (state == desiredState)
                         {
+                            outResult.cancel = true;
                             outResult.message = warn;
                             outResult.messageColour = ConsoleColor.Yellow;
                         }
@@ -117,7 +120,9 @@ namespace WinWebDetect
 
                     _latestContent = response.Content.ReadAsStringAsync().Result;
 
-                    bool differsFromInitial = false;
+                    bool notify = false;
+                    bool cancelled = false;
+
                     if (_subtrackerResults == null || _subtrackerResults.Length != subtrackers.Count)
                         _subtrackerResults = new SubTracker.CheckResult[subtrackers.Count];
 
@@ -126,10 +131,16 @@ namespace WinWebDetect
                         subtrackers[i].Check(_latestContent, ref _subtrackerResults[i]);
 
                         if (_subtrackerResults[i].notify)
-                            differsFromInitial = true;
+                            notify = true;
+
+                        if (_subtrackerResults[i].cancel)
+                            cancelled = true;
                     }
 
-                    return differsFromInitial ? CheckResult.IS_DESIRED_STATE : CheckResult.IS_NOT_DESIRED_STATE;
+                    if (cancelled)
+                        notify = false;
+
+                    return notify ? CheckResult.IS_DESIRED_STATE : CheckResult.IS_NOT_DESIRED_STATE;
                 }
 
                 _subtrackerResults = null;
